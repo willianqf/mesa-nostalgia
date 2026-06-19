@@ -48,8 +48,12 @@ const directionEl = document.querySelector("#direction");
 const colorPickerEl = document.querySelector("#colorPicker");
 const newGameBtn = document.querySelector("#newGameBtn");
 const menuEl = document.querySelector("#menu");
+const gameMenuEl = document.querySelector("#gameMenu");
 const startBtn = document.querySelector("#startBtn");
 const menuBtn = document.querySelector("#menuBtn");
+const resumeBtn = document.querySelector("#resumeBtn");
+const restartBtn = document.querySelector("#restartBtn");
+const homeBtn = document.querySelector("#homeBtn");
 const tableEl = document.querySelector(".table");
 
 const flyingLayer = document.createElement("div");
@@ -103,6 +107,7 @@ async function startGame() {
   recentHandInsert = null;
   jumpState = null;
   colorPickerEl.hidden = true;
+  gameMenuEl.hidden = true;
   tableEl.classList.remove("won");
   removeEffectBadge();
   if (effectTimeout) {
@@ -306,7 +311,7 @@ async function drawForCurrent(amount) {
 }
 
 async function drawOneForHuman() {
-  if (busy || gameOver || currentPlayer !== 0 || pendingWild) return;
+  if (busy || gameOver || currentPlayer !== 0 || pendingWild || !gameMenuEl.hidden) return;
 
   if (pendingDraw2 > 0) {
     if (playerHasStackableDraw2(0)) {
@@ -353,7 +358,7 @@ async function drawOneForHuman() {
 }
 
 async function botTurn() {
-  if (busy || gameOver || players[currentPlayer].isHuman) return;
+  if (busy || gameOver || players[currentPlayer].isHuman || !gameMenuEl.hidden) return;
   const player = players[currentPlayer];
 
   if (pendingDraw2 > 0) {
@@ -445,7 +450,7 @@ function favoriteColor(player) {
 }
 
 function scheduleBots() {
-  if (!gameOver && !busy && !players[currentPlayer].isHuman) {
+  if (!gameOver && !busy && !players[currentPlayer].isHuman && gameMenuEl.hidden) {
     window.setTimeout(botTurn, 850);
   }
 }
@@ -685,6 +690,7 @@ function render() {
   deckEl.disabled = !gameStarted
     || busy
     || gameOver
+    || !gameMenuEl.hidden
     || currentPlayer !== 0
     || Boolean(pendingWild)
     || (pendingAmount > 0 ? playerHasStackablePenalty(0) : playerHasPlayable(0));
@@ -763,7 +769,7 @@ function renderHand() {
         return;
       }
 
-      if (!card || !canPlay(card, 0) || currentPlayer !== 0 || pendingWild || busy) return;
+      if (!card || !canPlay(card, 0) || currentPlayer !== 0 || pendingWild || busy || !gameMenuEl.hidden) return;
 
       if (card.color === "wild") {
         pendingWild = { index, isJump: false };
@@ -1036,6 +1042,21 @@ function renderTableTone() {
   tableEl.classList.add(`tone-${activeColor}`);
 }
 
+function openGameMenu() {
+  if (!gameStarted || !menuEl.classList.contains("hidden")) return;
+  gameMenuEl.hidden = false;
+  setStatus("Jogo pausado.");
+  render();
+}
+
+function closeGameMenu() {
+  if (gameMenuEl.hidden) return;
+  gameMenuEl.hidden = true;
+  announceTurn();
+  render();
+  scheduleBots();
+}
+
 function getAudioContext() {
   const AudioCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtor) return null;
@@ -1232,10 +1253,22 @@ newGameBtn.addEventListener("click", startGame);
 startBtn.addEventListener("click", () => {
   getAudioContext();
   menuEl.classList.add("hidden");
+  gameMenuEl.hidden = true;
   startGame();
 });
 menuBtn.addEventListener("click", () => {
+  openGameMenu();
+});
+resumeBtn.addEventListener("click", closeGameMenu);
+restartBtn.addEventListener("click", () => {
+  closeGameMenu();
+  startGame();
+});
+homeBtn.addEventListener("click", () => {
+  gameMenuEl.hidden = true;
   menuEl.classList.remove("hidden");
+  setStatus("Menu inicial.");
+  render();
 });
 
 render();

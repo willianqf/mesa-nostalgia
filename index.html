@@ -12,8 +12,24 @@
         <div class="menu-panel">
           <p class="menu-kicker">offline card table</p>
           <h1>Mesa Nostalgia</h1>
-          <p class="menu-copy">Uma partida rapida contra 3 bots, feita primeiro para testar a sensacao no navegador.</p>
-          <button id="startBtn" class="primary-button" type="button">Jogar</button>
+          <p class="menu-copy">Uma partida rápida contra 3 bots, feita primeiro para testar a sensação no navegador.</p>
+          <div class="menu-actions">
+            <button id="startBtn" class="primary-button" type="button">Jogar</button>
+            <button id="settingsBtn" class="ghost-button" type="button">Configurações</button>
+          </div>
+          <p id="settingsHint" class="menu-hint" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="gameMenu" class="overlay-menu" hidden aria-label="Menu do jogo">
+        <div class="overlay-panel">
+          <p class="menu-kicker">menu da partida</p>
+          <h2>Pausa</h2>
+          <div class="overlay-actions">
+            <button id="resumeBtn" class="primary-button" type="button">Retomar</button>
+            <button id="restartBtn" class="ghost-button" type="button">Nova partida</button>
+            <button id="homeBtn" class="ghost-button" type="button">Menu inicial</button>
+          </div>
         </div>
       </section>
 

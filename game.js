@@ -34,9 +34,10 @@ let gameStarted = false;
 let busy = false;
 let handScrollSpeed = 0;
 let handScrollFrame = null;
-let recentHandInsert = null;
 let jumpState = null;
 let audioContext = null;
+let effectTimeout = null;
+let blockedPlayerFx = null;
 
 const handEl = document.querySelector("#hand");
 const playersEl = document.querySelector("#players");
@@ -47,31 +48,45 @@ const directionEl = document.querySelector("#direction");
 const colorPickerEl = document.querySelector("#colorPicker");
 const newGameBtn = document.querySelector("#newGameBtn");
 const menuEl = document.querySelector("#menu");
+const gameMenuEl = document.querySelector("#gameMenu");
 const startBtn = document.querySelector("#startBtn");
+const settingsBtn = document.querySelector("#settingsBtn");
+const settingsHintEl = document.querySelector("#settingsHint");
 const menuBtn = document.querySelector("#menuBtn");
+const resumeBtn = document.querySelector("#resumeBtn");
+const restartBtn = document.querySelector("#restartBtn");
+const homeBtn = document.querySelector("#homeBtn");
+const tableEl = document.querySelector(".table");
 
 const flyingLayer = document.createElement("div");
 flyingLayer.className = "flying-layer";
 document.body.appendChild(flyingLayer);
 
+let cardUid = 0;
+
+function withUid(card) {
+  card.uid = cardUid += 1;
+  return card;
+}
+
 function makeDeck() {
   const cards = [];
 
   for (const color of colors) {
-    cards.push({ color, type: "number", value: 0 });
+    cards.push(withUid({ color, type: "number", value: 0 }));
     for (let value = 1; value <= 9; value += 1) {
-      cards.push({ color, type: "number", value });
-      cards.push({ color, type: "number", value });
+      cards.push(withUid({ color, type: "number", value }));
+      cards.push(withUid({ color, type: "number", value }));
     }
     for (const type of ["skip", "reverse", "draw2"]) {
-      cards.push({ color, type });
-      cards.push({ color, type });
+      cards.push(withUid({ color, type }));
+      cards.push(withUid({ color, type }));
     }
   }
 
   for (let i = 0; i < 4; i += 1) {
-    cards.push({ color: "wild", type: "wild" });
-    cards.push({ color: "wild", type: "wild4" });
+    cards.push(withUid({ color: "wild", type: "wild" }));
+    cards.push(withUid({ color: "wild", type: "wild4" }));
   }
 
   return shuffle(cards);
@@ -86,7 +101,7 @@ function shuffle(cards) {
   return copy;
 }
 
-function startGame() {
+async function startGame() {
   deck = makeDeck();
   discard = [];
   currentPlayer = 0;
@@ -97,18 +112,28 @@ function startGame() {
   pendingDraw4 = 0;
   gameOver = false;
   gameStarted = true;
-  busy = false;
-  recentHandInsert = null;
+  busy = true;
   jumpState = null;
+  blockedPlayerFx = null;
+  if (settingsHintEl) {
+    settingsHintEl.textContent = "";
+  }
   colorPickerEl.hidden = true;
-  document.querySelector(".table").classList.remove("won");
+  gameMenuEl.hidden = true;
+  tableEl.classList.remove("won");
+  removeEffectBadge();
+  if (effectTimeout) {
+    window.clearTimeout(effectTimeout);
+    effectTimeout = null;
+  }
 
   for (const player of players) {
     player.hand = [];
-    for (let i = 0; i < 7; i += 1) {
-      player.hand.push(drawCard());
-    }
   }
+
+  setStatus("Distribuindo cartas...");
+  render();
+  await dealInitialHands();
 
   let first = drawCard();
   while (first.color === "wild" || first.type !== "number") {
@@ -120,7 +145,10 @@ function startGame() {
   first.playedBy = null;
   first.landing = { x: 0, y: 0, rot: 7 };
   activeColor = first.color;
+  render();
+  await animateOpeningDiscard(first);
   setStatus("Sua vez. Jogue uma carta.");
+  busy = false;
   render();
 }
 
@@ -241,7 +269,13 @@ async function playCard(playerIndex, cardIndex, chosenColor = null, sourceEl = n
 }
 
 async function applyEffect(card) {
+  if (card.type !== "number") {
+    showEffectBadge(effectLabel(card));
+    await wait(320);
+  }
+
   if (card.type === "reverse") {
+    pulseTable("action-burst");
     direction *= -1;
     if (players.length === 2) {
       advanceTurn();
@@ -249,19 +283,25 @@ async function applyEffect(card) {
   }
 
   if (card.type === "skip") {
+    const blockedPlayer = (currentPlayer + direction + players.length) % players.length;
+    await showBlockBurst(blockedPlayer);
     advanceTurn();
   }
 
   if (card.type === "draw2") {
     pendingDraw2 += 2 * (card.jumpStack || 1);
+    pulseTable("action-burst");
     advanceTurn();
     setStatus(`${players[currentPlayer].name} precisa jogar +2 ou comprar ${pendingDraw2}.`);
     return;
   } else if (card.type === "wild4") {
     pendingDraw4 += 4 * (card.jumpStack || 1);
+    pulseTable("plus4-impact");
     advanceTurn();
     setStatus(`${players[currentPlayer].name} precisa jogar +4 ou comprar ${pendingDraw4}.`);
     return;
+  } else if (card.type === "wild") {
+    pulseTable("wild-shift");
   }
 
   advanceTurn();
@@ -275,16 +315,20 @@ function advanceTurn() {
 async function drawForCurrent(amount) {
   for (let i = 0; i < amount; i += 1) {
     const card = drawCard();
-    await animateDraw(card, destinationForPlayer(currentPlayer));
-    players[currentPlayer].hand.push(card);
-    markHandInsert(currentPlayer, players[currentPlayer].hand.length - 1);
+    if (currentPlayer === 0) {
+      players[0].hand.push(card);
+      await animateDrawToHand(card);
+    } else {
+      await animateDraw(card, destinationForPlayer(currentPlayer));
+      players[currentPlayer].hand.push(card);
+    }
     render();
   }
   setStatus(`${players[currentPlayer].name} comprou ${amount} cartas.`);
 }
 
 async function drawOneForHuman() {
-  if (busy || gameOver || currentPlayer !== 0 || pendingWild) return;
+  if (busy || gameOver || currentPlayer !== 0 || pendingWild || !gameMenuEl.hidden) return;
 
   if (pendingDraw2 > 0) {
     if (playerHasStackableDraw2(0)) {
@@ -311,9 +355,8 @@ async function drawOneForHuman() {
 
   busy = true;
   const card = drawCard();
-  await animateDraw(card, destinationForPlayer(0));
   players[0].hand.push(card);
-  markHandInsert(0, players[0].hand.length - 1);
+  await animateDrawToHand(card);
   busy = false;
   render();
 
@@ -331,7 +374,7 @@ async function drawOneForHuman() {
 }
 
 async function botTurn() {
-  if (busy || gameOver || players[currentPlayer].isHuman) return;
+  if (busy || gameOver || players[currentPlayer].isHuman || !gameMenuEl.hidden) return;
   const player = players[currentPlayer];
 
   if (pendingDraw2 > 0) {
@@ -374,7 +417,6 @@ async function botTurn() {
   setStatus(`${player.name} comprou uma carta.`);
   await animateDraw(drawnCard, destinationForPlayer(currentPlayer));
   player.hand.push(drawnCard);
-  markHandInsert(currentPlayer, player.hand.length - 1);
   busy = false;
   render();
 
@@ -423,7 +465,7 @@ function favoriteColor(player) {
 }
 
 function scheduleBots() {
-  if (!gameOver && !busy && !players[currentPlayer].isHuman) {
+  if (!gameOver && !busy && !players[currentPlayer].isHuman && gameMenuEl.hidden) {
     window.setTimeout(botTurn, 850);
   }
 }
@@ -439,16 +481,6 @@ function announceTurn() {
     return;
   }
   setStatus(players[currentPlayer].isHuman ? "Sua vez." : `Vez de ${players[currentPlayer].name}.`);
-}
-
-function markHandInsert(playerIndex, index) {
-  const token = `${playerIndex}-${index}-${Date.now()}`;
-  recentHandInsert = { playerIndex, index, token };
-  window.setTimeout(() => {
-    if (recentHandInsert?.token !== token) return;
-    recentHandInsert = null;
-    render();
-  }, 430);
 }
 
 function isExactJumpMatch(card, target) {
@@ -587,6 +619,34 @@ function showJumpBurst(playerIndex) {
   window.setTimeout(() => burst.remove(), 900);
 }
 
+async function showBlockBurst(playerIndex) {
+  blockedPlayerFx = playerIndex;
+  render();
+  playCardSound("block");
+  pulseTable("action-burst");
+  setStatus(`${players[playerIndex].name} foi bloqueado.`);
+
+  const anchor = playerIndex === 0
+    ? document.querySelector(".you-label")
+    : document.querySelector(`[data-player="${playerIndex}"] .avatar`);
+
+  if (anchor) {
+    const tableRect = tableEl.getBoundingClientRect();
+    const rect = anchor.getBoundingClientRect();
+    const burst = document.createElement("div");
+    burst.className = "block-burst";
+    burst.textContent = "BLOQUEIO";
+    burst.style.left = `${rect.left - tableRect.left + rect.width / 2}px`;
+    burst.style.top = `${rect.top - tableRect.top + rect.height / 2}px`;
+    tableEl.appendChild(burst);
+    window.setTimeout(() => burst.remove(), 920);
+  }
+
+  await wait(620);
+  blockedPlayerFx = null;
+  render();
+}
+
 function makeDiscardLanding(playerIndex) {
   const profiles = [
     { x: 0, y: 18, rot: 5 },
@@ -657,23 +717,45 @@ function render() {
   renderHand();
   renderDiscard();
   renderDirection();
+  renderTableTone();
   const pendingAmount = pendingDrawAmount();
   deckEl.querySelector("span").textContent = pendingAmount > 0 ? `+${pendingAmount}` : "Comprar";
   deckEl.disabled = !gameStarted
     || busy
     || gameOver
+    || !gameMenuEl.hidden
     || currentPlayer !== 0
     || Boolean(pendingWild)
     || (pendingAmount > 0 ? playerHasStackablePenalty(0) : playerHasPlayable(0));
 }
 
+let directionBuilt = false;
+
 function renderDirection() {
   const movingRight = direction > 0;
+
+  if (!directionBuilt) {
+    const arrow = "M46 6 L60 12 L46 18 L50 12 Z";
+    directionEl.innerHTML = `
+      <svg class="dir-ring" viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="dir-track" cx="50" cy="50" r="37"></circle>
+        <g class="dir-spinner">
+          <path class="dir-arrow" d="${arrow}"></path>
+          <path class="dir-arrow" d="${arrow}" transform="rotate(120 50 50)"></path>
+          <path class="dir-arrow" d="${arrow}" transform="rotate(240 50 50)"></path>
+        </g>
+        <circle class="dir-core" cx="50" cy="50" r="15"></circle>
+      </svg>
+      <span class="direction-label"></span>
+    `;
+    directionBuilt = true;
+  }
+
   directionEl.classList.toggle("reversed", !movingRight);
-  directionEl.innerHTML = `
-    <span class="direction-arrow">${movingRight ? ">>" : "<<"}</span>
-    <span class="direction-label">${movingRight ? "Direita" : "Esquerda"}</span>
-  `;
+  const label = directionEl.querySelector(".direction-label");
+  if (label) {
+    label.textContent = movingRight ? "Direita" : "Esquerda";
+  }
 }
 
 function renderPlayers() {
@@ -684,12 +766,11 @@ function renderPlayers() {
       const realIndex = index + 1;
       const fan = Array.from({ length: Math.min(player.hand.length, 7) }, (_, cardIndex) => {
         const tilt = `${(cardIndex - 3) * 8}deg`;
-        const entering = recentHandInsert?.playerIndex === realIndex && cardIndex === Math.min(player.hand.length, 7) - 1 ? "draw-enter" : "";
-        return `<span class="back-card ${entering}" style="--tilt:${tilt}"></span>`;
+        return `<span class="back-card" style="--tilt:${tilt}"></span>`;
       }).join("");
 
       return `
-        <div class="opponent ${positions[realIndex]} ${currentPlayer === realIndex ? "active" : ""}" data-player="${realIndex}">
+        <div class="opponent ${positions[realIndex]} ${currentPlayer === realIndex ? "active" : ""} ${blockedPlayerFx === realIndex ? "blocked" : ""}" data-player="${realIndex}">
           <div class="avatar">${player.name[0]}</div>
           <div class="opponent-name">${player.name}</div>
           <div class="mini-fan">${fan}</div>
@@ -700,59 +781,140 @@ function renderPlayers() {
     .join("");
 }
 
+function createHandCard(card) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = cardHtml(card, { button: true, index: 0 }).trim();
+  const node = tpl.content.firstElementChild;
+  node.dataset.uid = String(card.uid);
+  node.addEventListener("click", () => onHandCardClick(node));
+  return node;
+}
+
+function updateHandCardState(node, index, playable, jumpable) {
+  node.dataset.index = String(index);
+  node.classList.toggle("playable", playable);
+  node.classList.toggle("jumpable", jumpable);
+  node.disabled = !(playable || jumpable);
+}
+
+async function onHandCardClick(cardEl) {
+  const index = Number(cardEl.dataset.index);
+  const card = players[0].hand[index];
+  if (!card) return;
+
+  if (jumpState && isExactJumpMatch(card, jumpState.card)) {
+    if (card.color === "wild") {
+      window.clearTimeout(jumpState.timer);
+      jumpState.waitingForColor = true;
+      pendingWild = { index, isJump: true };
+      colorPickerEl.hidden = false;
+      setStatus("Escolha uma cor para o JUMP.");
+      render();
+      return;
+    }
+
+    await performJump(0, index, null, cardEl);
+    return;
+  }
+
+  if (!canPlay(card, 0) || currentPlayer !== 0 || pendingWild || busy || !gameMenuEl.hidden) return;
+
+  if (card.color === "wild") {
+    pendingWild = { index, isJump: false };
+    colorPickerEl.hidden = false;
+    setStatus("Escolha uma cor.");
+    render();
+    return;
+  }
+
+  await playCard(0, index, null, cardEl);
+}
+
+// Reconcilia a mão por uid: reaproveita os nós existentes em vez de recriar
+// todo o innerHTML. Assim a carta comprada encaixa no lugar sem a mão "piscar".
 function renderHand() {
-  const previousScrollLeft = handEl.scrollLeft;
-  handEl.innerHTML = players[0].hand
-    .map((card, index) => {
-      const jumpable = Boolean(jumpState && isExactJumpMatch(card, jumpState.card));
-      return cardHtml(card, {
-        button: true,
-        playable: currentPlayer === 0 && canPlay(card, 0) && !pendingWild && !gameOver && !busy,
-        jumpable,
-        entering: recentHandInsert?.playerIndex === 0 && recentHandInsert.index === index,
-        index,
-      });
-    })
-    .join("");
+  const youLabelEl = document.querySelector(".you-label");
+  if (youLabelEl) {
+    youLabelEl.classList.toggle("blocked", blockedPlayerFx === 0);
+  }
 
-  window.requestAnimationFrame(() => {
-    const maxScroll = Math.max(0, handEl.scrollWidth - handEl.clientWidth);
-    handEl.scrollLeft = Math.min(previousScrollLeft, maxScroll);
+  const hand = players[0].hand;
+  const liveUids = new Set(hand.map((card) => card.uid));
+
+  Array.from(handEl.children).forEach((node) => {
+    if (!liveUids.has(Number(node.dataset.uid))) {
+      node.remove();
+    }
   });
 
-  handEl.querySelectorAll(".card").forEach((cardEl) => {
-    cardEl.addEventListener("click", async () => {
-      const index = Number(cardEl.dataset.index);
-      const card = players[0].hand[index];
+  hand.forEach((card, index) => {
+    let node = handEl.querySelector(`.card[data-uid="${card.uid}"]`);
+    if (!node) {
+      node = createHandCard(card);
+    }
+    const jumpable = Boolean(jumpState && isExactJumpMatch(card, jumpState.card));
+    const playable = currentPlayer === 0 && canPlay(card, 0) && !pendingWild && !gameOver && !busy;
+    updateHandCardState(node, index, playable, jumpable);
 
-      if (jumpState && isExactJumpMatch(card, jumpState.card)) {
-        if (card.color === "wild") {
-          window.clearTimeout(jumpState.timer);
-          jumpState.waitingForColor = true;
-          pendingWild = { index, isJump: true };
-          colorPickerEl.hidden = false;
-          setStatus("Escolha uma cor para o JUMP.");
-          render();
-          return;
-        }
-
-        await performJump(0, index, null, cardEl);
-        return;
-      }
-
-      if (!card || !canPlay(card, 0) || currentPlayer !== 0 || pendingWild || busy) return;
-
-      if (card.color === "wild") {
-        pendingWild = { index, isJump: false };
-        colorPickerEl.hidden = false;
-        setStatus("Escolha uma cor.");
-        render();
-        return;
-      }
-
-      await playCard(0, index, null, cardEl);
-    });
+    if (handEl.children[index] !== node) {
+      handEl.insertBefore(node, handEl.children[index] || null);
+    }
   });
+}
+
+// Encaixe real: o proprio no da carta (ja inserido na mao) desliza do monte
+// ate o seu slot. Nao ha fly-card separado nem troca de elemento — e o mesmo
+// objeto que voa e assenta, encaixando em tempo real sem a mao "atualizar".
+async function animateDrawToHand(card) {
+  renderHand();
+  const cardEl = handEl.querySelector(`.card[data-uid="${card.uid}"]`);
+  if (!cardEl) {
+    await animateDraw(card, handEl);
+    return;
+  }
+
+  // Garante que o slot da carta nova fique visivel para receber o encaixe.
+  handEl.scrollLeft = handEl.scrollWidth;
+
+  const deckRect = deckEl.getBoundingClientRect();
+  const slotRect = cardEl.getBoundingClientRect();
+  const dx = deckRect.left - slotRect.left;
+  const dy = deckRect.top - slotRect.top;
+  const side = dx >= 0 ? 1 : -1;
+  const arc = Math.min(130, Math.max(60, Math.abs(dx) * 0.16 + Math.abs(dy) * 0.12));
+
+  animateDeckPulse();
+  playCardSound("draw");
+
+  cardEl.style.zIndex = "40";
+  const animation = cardEl.animate([
+    {
+      transform: `translate3d(${dx}px, ${dy}px, 0) rotateZ(-8deg) scale(0.96)`,
+      filter: "drop-shadow(0 10px 14px rgba(0,0,0,.3))",
+      offset: 0,
+    },
+    {
+      transform: `translate3d(${dx * 0.46}px, ${dy * 0.5 - arc}px, 0) rotateZ(${7 * side}deg) scale(1.09)`,
+      filter: "drop-shadow(0 22px 24px rgba(0,0,0,.32))",
+      offset: 0.5,
+    },
+    {
+      transform: `translate3d(${dx * 0.12}px, ${dy * 0.12 - arc * 0.18}px, 0) rotateZ(${-3 * side}deg) scale(1.04)`,
+      filter: "drop-shadow(0 14px 16px rgba(0,0,0,.26))",
+      offset: 0.82,
+    },
+    {
+      transform: "translate3d(0, 0, 0) rotateZ(0deg) scale(1)",
+      filter: "drop-shadow(0 8px 12px rgba(0,0,0,.22))",
+      offset: 1,
+    },
+  ], {
+    duration: 560,
+    easing: "cubic-bezier(.2,.84,.24,1)",
+  });
+
+  await animation.finished;
+  cardEl.style.zIndex = "";
 }
 
 function renderDiscard() {
@@ -812,6 +974,23 @@ function cardHtml(card, options = {}) {
 function labelFor(card) {
   if (card.type === "number") return String(card.value);
   return actionLabels[card.type];
+}
+
+function effectLabel(card) {
+  switch (card.type) {
+    case "skip":
+      return "BLOQUEIO";
+    case "reverse":
+      return "REVERSO";
+    case "draw2":
+      return "+2";
+    case "wild":
+      return "TROCA DE COR";
+    case "wild4":
+      return "+4";
+    default:
+      return "";
+  }
 }
 
 function rectCenter(rect) {
@@ -926,6 +1105,91 @@ function popTopDiscard() {
   top.classList.add("drop-pop");
 }
 
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function dealInitialHands() {
+  for (let round = 0; round < 7; round += 1) {
+    const draws = [];
+    const animations = [];
+    for (let playerIndex = 0; playerIndex < players.length; playerIndex += 1) {
+      const card = drawCard();
+      draws.push({ card, playerIndex });
+      const targetEl = destinationForPlayer(playerIndex) || tableEl;
+      const sourceRect = deckEl.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+      animations.push(animateFloatingCard(card, sourceRect, targetRect, {
+        faceDown: playerIndex !== 0,
+        mode: "draw",
+        duration: 320,
+      }));
+    }
+
+    for (const draw of draws) {
+      players[draw.playerIndex].hand.push(draw.card);
+    }
+    render();
+    await Promise.all(animations);
+  }
+}
+
+async function animateOpeningDiscard(card) {
+  const sourceRect = deckEl.getBoundingClientRect();
+  await animateFloatingCard(card, sourceRect, discardTargetRect(card.landing), {
+    mode: "play",
+    duration: 520,
+    landRot: card.landing.rot,
+  });
+  popTopDiscard();
+}
+
+function removeEffectBadge() {
+  const existing = tableEl.querySelector(".effect-badge");
+  if (existing) existing.remove();
+}
+
+function showEffectBadge(text) {
+  if (!text) return;
+  removeEffectBadge();
+  const badge = document.createElement("div");
+  badge.className = "effect-badge";
+  badge.textContent = text;
+  tableEl.appendChild(badge);
+  if (effectTimeout) {
+    window.clearTimeout(effectTimeout);
+  }
+  effectTimeout = window.setTimeout(() => removeEffectBadge(), 820);
+}
+
+function pulseTable(className) {
+  tableEl.classList.remove(className);
+  void tableEl.offsetWidth;
+  tableEl.classList.add(className);
+  window.setTimeout(() => tableEl.classList.remove(className), 760);
+}
+
+function renderTableTone() {
+  tableEl.classList.remove("tone-red", "tone-blue", "tone-green", "tone-gold");
+  if (!activeColor || activeColor === "wild") return;
+  tableEl.classList.add(`tone-${activeColor}`);
+}
+
+function openGameMenu() {
+  if (!gameStarted || !menuEl.classList.contains("hidden")) return;
+  gameMenuEl.hidden = false;
+  setStatus("Jogo pausado.");
+  render();
+}
+
+function closeGameMenu() {
+  if (gameMenuEl.hidden) return;
+  gameMenuEl.hidden = true;
+  announceTurn();
+  render();
+  scheduleBots();
+}
+
 function getAudioContext() {
   const AudioCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtor) return null;
@@ -943,7 +1207,7 @@ function playCardSound(kind) {
   if (!ctx) return;
 
   const now = ctx.currentTime;
-  const duration = kind === "play" ? 0.12 : 0.16;
+  const duration = kind === "play" ? 0.12 : kind === "block" ? 0.2 : 0.16;
   const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * duration), ctx.sampleRate);
   const data = buffer.getChannelData(0);
 
@@ -957,12 +1221,15 @@ function playCardSound(kind) {
 
   const filter = ctx.createBiquadFilter();
   filter.type = "bandpass";
-  filter.frequency.setValueAtTime(kind === "play" ? 1150 : 780, now);
-  filter.Q.setValueAtTime(kind === "play" ? 1.2 : 0.9, now);
+  const noiseFrequency = kind === "play" ? 1150 : kind === "block" ? 520 : 780;
+  const noiseQ = kind === "play" ? 1.2 : kind === "block" ? 2.1 : 0.9;
+  filter.frequency.setValueAtTime(noiseFrequency, now);
+  filter.Q.setValueAtTime(noiseQ, now);
 
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(kind === "play" ? 0.12 : 0.09, now + 0.012);
+  const noisePeak = kind === "play" ? 0.12 : kind === "block" ? 0.15 : 0.09;
+  gain.gain.exponentialRampToValueAtTime(noisePeak, now + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
   noise.connect(filter);
@@ -973,11 +1240,14 @@ function playCardSound(kind) {
 
   const click = ctx.createOscillator();
   const clickGain = ctx.createGain();
-  click.type = "triangle";
-  click.frequency.setValueAtTime(kind === "play" ? 210 : 150, now);
-  click.frequency.exponentialRampToValueAtTime(kind === "play" ? 90 : 70, now + 0.055);
+  click.type = kind === "block" ? "square" : "triangle";
+  const clickStart = kind === "play" ? 210 : kind === "block" ? 142 : 150;
+  const clickEnd = kind === "play" ? 90 : kind === "block" ? 48 : 70;
+  const clickPeak = kind === "play" ? 0.08 : kind === "block" ? 0.12 : 0.045;
+  click.frequency.setValueAtTime(clickStart, now);
+  click.frequency.exponentialRampToValueAtTime(clickEnd, now + 0.055);
   clickGain.gain.setValueAtTime(0.0001, now);
-  clickGain.gain.exponentialRampToValueAtTime(kind === "play" ? 0.08 : 0.045, now + 0.006);
+  clickGain.gain.exponentialRampToValueAtTime(clickPeak, now + 0.006);
   clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
   click.connect(clickGain);
   clickGain.connect(ctx.destination);
@@ -1037,7 +1307,7 @@ function animateFloatingCard(card, sourceRect, targetRect, options = {}) {
       offset: 1,
     },
   ], {
-    duration: isDraw ? 920 : 860,
+    duration: options.duration ?? (isDraw ? 920 : 860),
     easing: "cubic-bezier(.18,.84,.2,1)",
     fill: "forwards",
   });
@@ -1069,19 +1339,26 @@ function updateHandEdgeScroll(clientX) {
   }
 
   const rect = handEl.getBoundingClientRect();
-  const edgeSize = Math.min(96, rect.width * 0.26);
+  const edgeSize = Math.min(130, rect.width * 0.32);
   const leftDistance = clientX - rect.left;
   const rightDistance = rect.right - clientX;
 
+  // Velocidade cresce de forma quadratica: lenta ao entrar na zona da borda e
+  // bem mais rapida (ate ~52px/frame) ao encostar na ponta.
+  const minSpeed = 5;
+  const maxSpeed = 52;
+  const speedFor = (distance) => {
+    const force = 1 - Math.max(0, distance) / edgeSize;
+    return minSpeed + force * force * (maxSpeed - minSpeed);
+  };
+
   if (leftDistance < edgeSize) {
-    const force = 1 - Math.max(0, leftDistance) / edgeSize;
-    setHandScrollSpeed(-Math.max(3, force * 16));
+    setHandScrollSpeed(-speedFor(leftDistance));
     return;
   }
 
   if (rightDistance < edgeSize) {
-    const force = 1 - Math.max(0, rightDistance) / edgeSize;
-    setHandScrollSpeed(Math.max(3, force * 16));
+    setHandScrollSpeed(speedFor(rightDistance));
     return;
   }
 
@@ -1118,14 +1395,44 @@ handEl.addEventListener("wheel", (event) => {
   event.preventDefault();
   handEl.scrollLeft += event.deltaY;
 }, { passive: false });
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!gameMenuEl.hidden) {
+    closeGameMenu();
+    return;
+  }
+  if (menuEl.classList.contains("hidden") && gameStarted && !gameOver) {
+    openGameMenu();
+  }
+});
 newGameBtn.addEventListener("click", startGame);
 startBtn.addEventListener("click", () => {
   getAudioContext();
   menuEl.classList.add("hidden");
+  gameMenuEl.hidden = true;
   startGame();
 });
+settingsBtn.addEventListener("click", () => {
+  if (settingsHintEl) {
+    settingsHintEl.textContent = "Configurações em breve.";
+  }
+});
 menuBtn.addEventListener("click", () => {
+  openGameMenu();
+});
+resumeBtn.addEventListener("click", closeGameMenu);
+restartBtn.addEventListener("click", () => {
+  closeGameMenu();
+  startGame();
+});
+homeBtn.addEventListener("click", () => {
+  gameMenuEl.hidden = true;
   menuEl.classList.remove("hidden");
+  if (settingsHintEl) {
+    settingsHintEl.textContent = "";
+  }
+  setStatus("Menu inicial.");
+  render();
 });
 
 render();

@@ -1297,7 +1297,7 @@ startBtn.addEventListener("click", () => {
 });
 settingsBtn.addEventListener("click", () => {
   if (settingsHintEl) {
-    settingsHintEl.textContent = "Configuracoes em breve.";
+    settingsHintEl.textContent = "Configurações em breve.";
   }
 });
 menuBtn.addEventListener("click", () => {

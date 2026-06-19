@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Mesa Nostalgia</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="game-shell">
+      <section id="menu" class="menu-screen" aria-label="Menu inicial">
+        <div class="menu-panel">
+          <p class="menu-kicker">offline card table</p>
+          <h1>Mesa Nostalgia</h1>
+          <p class="menu-copy">Uma partida rapida contra 3 bots, feita primeiro para testar a sensacao no navegador.</p>
+          <button id="startBtn" class="primary-button" type="button">Jogar</button>
+        </div>
+      </section>
+
+      <section class="table" aria-label="Mesa de jogo">
+        <div class="top-bar">
+          <button id="menuBtn" class="icon-button" type="button" title="Menu">M</button>
+          <div class="game-title">Mesa Nostalgia</div>
+          <button id="newGameBtn" class="icon-button" type="button" title="Nova partida">R</button>
+        </div>
+
+        <div id="players" class="players"></div>
+
+        <div class="center-zone" aria-live="polite">
+          <div id="direction" class="direction">R</div>
+          <div id="discard" class="discard-pile"></div>
+          <div id="status" class="status">Sua vez.</div>
+        </div>
+
+        <button id="deck" class="deck deck-corner" type="button" title="Comprar carta">
+          <span>Comprar</span>
+        </button>
+
+        <div id="colorPicker" class="color-picker" hidden>
+          <div class="color-wheel" role="group" aria-label="Escolher cor">
+            <button class="wheel-slice red" data-color="red" type="button" aria-label="Vermelho"><span>Vermelho</span></button>
+            <button class="wheel-slice blue" data-color="blue" type="button" aria-label="Azul"><span>Azul</span></button>
+            <button class="wheel-slice green" data-color="green" type="button" aria-label="Verde"><span>Verde</span></button>
+            <button class="wheel-slice gold" data-color="gold" type="button" aria-label="Amarelo"><span>Amarelo</span></button>
+            <div class="wheel-center">Escolha</div>
+          </div>
+        </div>
+
+        <div class="hand-wrap">
+          <div class="you-label">Voce</div>
+          <div id="hand" class="hand" aria-label="Sua mão"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>

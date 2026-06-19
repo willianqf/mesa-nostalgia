@@ -1249,6 +1249,16 @@ handEl.addEventListener("wheel", (event) => {
   event.preventDefault();
   handEl.scrollLeft += event.deltaY;
 }, { passive: false });
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!gameMenuEl.hidden) {
+    closeGameMenu();
+    return;
+  }
+  if (menuEl.classList.contains("hidden") && gameStarted && !gameOver) {
+    openGameMenu();
+  }
+});
 newGameBtn.addEventListener("click", startGame);
 startBtn.addEventListener("click", () => {
   getAudioContext();

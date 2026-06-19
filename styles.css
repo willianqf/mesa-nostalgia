@@ -122,6 +122,19 @@ button {
   line-height: 1.35;
 }
 
+.menu-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.menu-hint {
+  min-height: 20px;
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .primary-button {
   width: 100%;
   min-height: 48px;
@@ -303,6 +316,11 @@ button {
   outline: 4px solid rgba(255, 236, 114, 0.86);
 }
 
+.opponent.blocked .avatar {
+  outline: 4px solid rgba(255, 126, 104, 0.92);
+  box-shadow: 0 0 0 6px rgba(255, 126, 104, 0.24);
+}
+
 .opponent-name {
   font-weight: 900;
   text-shadow: 0 2px 4px var(--shadow);
@@ -370,12 +388,13 @@ button {
   top: calc(50% - 168px);
   left: 50%;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  min-width: 118px;
-  padding: 7px 12px;
+  gap: 6px;
+  min-width: 102px;
+  padding: 8px 11px 10px;
   border: 2px solid rgba(255, 255, 255, 0.72);
-  border-radius: 999px;
+  border-radius: 16px;
   color: #12351f;
   font-size: 12px;
   font-weight: 900;
@@ -386,12 +405,20 @@ button {
 }
 
 .direction-arrow {
-  font-size: 17px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(18, 53, 31, 0.36);
+  border-radius: 50%;
+  font-size: 26px;
   line-height: 1;
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .direction-label {
   line-height: 1;
+  letter-spacing: 0.04em;
 }
 
 .direction.reversed {
@@ -742,6 +769,11 @@ button {
   background: rgba(255, 255, 255, 0.86);
 }
 
+.you-label.blocked {
+  background: #ffef57;
+  box-shadow: 0 0 0 4px rgba(255, 126, 104, 0.24);
+}
+
 .hand {
   display: flex;
   align-items: end;
@@ -828,6 +860,23 @@ button {
   animation: jumpBurst 860ms cubic-bezier(0.18, 0.84, 0.2, 1) forwards;
 }
 
+.block-burst {
+  position: absolute;
+  z-index: 18;
+  padding: 4px 10px;
+  border: 3px solid white;
+  border-radius: 999px;
+  color: #fff8ef;
+  font-size: 15px;
+  font-weight: 900;
+  text-shadow: none;
+  background: #d33641;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: blockBurst 900ms cubic-bezier(0.18, 0.84, 0.2, 1) forwards;
+}
+
 .flying-layer {
   position: fixed;
   inset: 0;
@@ -900,6 +949,25 @@ button {
   0% {
     opacity: 0;
     transform: translate(-50%, -50%) scale(0.65) rotate(-9deg);
+  }
+
+  @keyframes blockBurst {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, -44%) scale(0.74);
+    }
+    18% {
+      opacity: 1;
+      transform: translate(-50%, -74%) scale(1.12);
+    }
+    72% {
+      opacity: 1;
+      transform: translate(-50%, -92%) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -112%) scale(0.94);
+    }
   }
   18% {
     opacity: 1;

@@ -34,10 +34,10 @@ let gameStarted = false;
 let busy = false;
 let handScrollSpeed = 0;
 let handScrollFrame = null;
-let recentHandInsert = null;
 let jumpState = null;
 let audioContext = null;
 let effectTimeout = null;
+let blockedPlayerFx = null;
 
 const handEl = document.querySelector("#hand");
 const playersEl = document.querySelector("#players");
@@ -50,6 +50,8 @@ const newGameBtn = document.querySelector("#newGameBtn");
 const menuEl = document.querySelector("#menu");
 const gameMenuEl = document.querySelector("#gameMenu");
 const startBtn = document.querySelector("#startBtn");
+const settingsBtn = document.querySelector("#settingsBtn");
+const settingsHintEl = document.querySelector("#settingsHint");
 const menuBtn = document.querySelector("#menuBtn");
 const resumeBtn = document.querySelector("#resumeBtn");
 const restartBtn = document.querySelector("#restartBtn");
@@ -104,8 +106,11 @@ async function startGame() {
   gameOver = false;
   gameStarted = true;
   busy = true;
-  recentHandInsert = null;
   jumpState = null;
+  blockedPlayerFx = null;
+  if (settingsHintEl) {
+    settingsHintEl.textContent = "";
+  }
   colorPickerEl.hidden = true;
   gameMenuEl.hidden = true;
   tableEl.classList.remove("won");
@@ -271,7 +276,8 @@ async function applyEffect(card) {
   }
 
   if (card.type === "skip") {
-    pulseTable("action-burst");
+    const blockedPlayer = (currentPlayer + direction + players.length) % players.length;
+    await showBlockBurst(blockedPlayer);
     advanceTurn();
   }
 
@@ -304,7 +310,6 @@ async function drawForCurrent(amount) {
     const card = drawCard();
     await animateDraw(card, destinationForPlayer(currentPlayer));
     players[currentPlayer].hand.push(card);
-    markHandInsert(currentPlayer, players[currentPlayer].hand.length - 1);
     render();
   }
   setStatus(`${players[currentPlayer].name} comprou ${amount} cartas.`);
@@ -340,7 +345,6 @@ async function drawOneForHuman() {
   const card = drawCard();
   await animateDraw(card, destinationForPlayer(0));
   players[0].hand.push(card);
-  markHandInsert(0, players[0].hand.length - 1);
   busy = false;
   render();
 
@@ -401,7 +405,6 @@ async function botTurn() {
   setStatus(`${player.name} comprou uma carta.`);
   await animateDraw(drawnCard, destinationForPlayer(currentPlayer));
   player.hand.push(drawnCard);
-  markHandInsert(currentPlayer, player.hand.length - 1);
   busy = false;
   render();
 
@@ -466,16 +469,6 @@ function announceTurn() {
     return;
   }
   setStatus(players[currentPlayer].isHuman ? "Sua vez." : `Vez de ${players[currentPlayer].name}.`);
-}
-
-function markHandInsert(playerIndex, index) {
-  const token = `${playerIndex}-${index}-${Date.now()}`;
-  recentHandInsert = { playerIndex, index, token };
-  window.setTimeout(() => {
-    if (recentHandInsert?.token !== token) return;
-    recentHandInsert = null;
-    render();
-  }, 430);
 }
 
 function isExactJumpMatch(card, target) {
@@ -614,6 +607,34 @@ function showJumpBurst(playerIndex) {
   window.setTimeout(() => burst.remove(), 900);
 }
 
+async function showBlockBurst(playerIndex) {
+  blockedPlayerFx = playerIndex;
+  render();
+  playCardSound("block");
+  pulseTable("action-burst");
+  setStatus(`${players[playerIndex].name} foi bloqueado.`);
+
+  const anchor = playerIndex === 0
+    ? document.querySelector(".you-label")
+    : document.querySelector(`[data-player="${playerIndex}"] .avatar`);
+
+  if (anchor) {
+    const tableRect = tableEl.getBoundingClientRect();
+    const rect = anchor.getBoundingClientRect();
+    const burst = document.createElement("div");
+    burst.className = "block-burst";
+    burst.textContent = "BLOQUEIO";
+    burst.style.left = `${rect.left - tableRect.left + rect.width / 2}px`;
+    burst.style.top = `${rect.top - tableRect.top + rect.height / 2}px`;
+    tableEl.appendChild(burst);
+    window.setTimeout(() => burst.remove(), 920);
+  }
+
+  await wait(620);
+  blockedPlayerFx = null;
+  render();
+}
+
 function makeDiscardLanding(playerIndex) {
   const profiles = [
     { x: 0, y: 18, rot: 5 },
@@ -700,7 +721,7 @@ function renderDirection() {
   const movingRight = direction > 0;
   directionEl.classList.toggle("reversed", !movingRight);
   directionEl.innerHTML = `
-    <span class="direction-arrow">${movingRight ? ">>" : "<<"}</span>
+    <span class="direction-arrow">${movingRight ? "↻" : "↺"}</span>
     <span class="direction-label">${movingRight ? "Direita" : "Esquerda"}</span>
   `;
 }
@@ -713,12 +734,11 @@ function renderPlayers() {
       const realIndex = index + 1;
       const fan = Array.from({ length: Math.min(player.hand.length, 7) }, (_, cardIndex) => {
         const tilt = `${(cardIndex - 3) * 8}deg`;
-        const entering = recentHandInsert?.playerIndex === realIndex && cardIndex === Math.min(player.hand.length, 7) - 1 ? "draw-enter" : "";
-        return `<span class="back-card ${entering}" style="--tilt:${tilt}"></span>`;
+        return `<span class="back-card" style="--tilt:${tilt}"></span>`;
       }).join("");
 
       return `
-        <div class="opponent ${positions[realIndex]} ${currentPlayer === realIndex ? "active" : ""}" data-player="${realIndex}">
+        <div class="opponent ${positions[realIndex]} ${currentPlayer === realIndex ? "active" : ""} ${blockedPlayerFx === realIndex ? "blocked" : ""}" data-player="${realIndex}">
           <div class="avatar">${player.name[0]}</div>
           <div class="opponent-name">${player.name}</div>
           <div class="mini-fan">${fan}</div>
@@ -731,6 +751,10 @@ function renderPlayers() {
 
 function renderHand() {
   const previousScrollLeft = handEl.scrollLeft;
+  const youLabelEl = document.querySelector(".you-label");
+  if (youLabelEl) {
+    youLabelEl.classList.toggle("blocked", blockedPlayerFx === 0);
+  }
   handEl.innerHTML = players[0].hand
     .map((card, index) => {
       const jumpable = Boolean(jumpState && isExactJumpMatch(card, jumpState.card));
@@ -738,7 +762,6 @@ function renderHand() {
         button: true,
         playable: currentPlayer === 0 && canPlay(card, 0) && !pendingWild && !gameOver && !busy,
         jumpable,
-        entering: recentHandInsert?.playerIndex === 0 && recentHandInsert.index === index,
         index,
       });
     })
@@ -1074,7 +1097,7 @@ function playCardSound(kind) {
   if (!ctx) return;
 
   const now = ctx.currentTime;
-  const duration = kind === "play" ? 0.12 : 0.16;
+  const duration = kind === "play" ? 0.12 : kind === "block" ? 0.2 : 0.16;
   const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * duration), ctx.sampleRate);
   const data = buffer.getChannelData(0);
 
@@ -1088,12 +1111,15 @@ function playCardSound(kind) {
 
   const filter = ctx.createBiquadFilter();
   filter.type = "bandpass";
-  filter.frequency.setValueAtTime(kind === "play" ? 1150 : 780, now);
-  filter.Q.setValueAtTime(kind === "play" ? 1.2 : 0.9, now);
+  const noiseFrequency = kind === "play" ? 1150 : kind === "block" ? 520 : 780;
+  const noiseQ = kind === "play" ? 1.2 : kind === "block" ? 2.1 : 0.9;
+  filter.frequency.setValueAtTime(noiseFrequency, now);
+  filter.Q.setValueAtTime(noiseQ, now);
 
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(kind === "play" ? 0.12 : 0.09, now + 0.012);
+  const noisePeak = kind === "play" ? 0.12 : kind === "block" ? 0.15 : 0.09;
+  gain.gain.exponentialRampToValueAtTime(noisePeak, now + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
   noise.connect(filter);
@@ -1104,11 +1130,14 @@ function playCardSound(kind) {
 
   const click = ctx.createOscillator();
   const clickGain = ctx.createGain();
-  click.type = "triangle";
-  click.frequency.setValueAtTime(kind === "play" ? 210 : 150, now);
-  click.frequency.exponentialRampToValueAtTime(kind === "play" ? 90 : 70, now + 0.055);
+  click.type = kind === "block" ? "square" : "triangle";
+  const clickStart = kind === "play" ? 210 : kind === "block" ? 142 : 150;
+  const clickEnd = kind === "play" ? 90 : kind === "block" ? 48 : 70;
+  const clickPeak = kind === "play" ? 0.08 : kind === "block" ? 0.12 : 0.045;
+  click.frequency.setValueAtTime(clickStart, now);
+  click.frequency.exponentialRampToValueAtTime(clickEnd, now + 0.055);
   clickGain.gain.setValueAtTime(0.0001, now);
-  clickGain.gain.exponentialRampToValueAtTime(kind === "play" ? 0.08 : 0.045, now + 0.006);
+  clickGain.gain.exponentialRampToValueAtTime(clickPeak, now + 0.006);
   clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
   click.connect(clickGain);
   clickGain.connect(ctx.destination);
@@ -1266,6 +1295,11 @@ startBtn.addEventListener("click", () => {
   gameMenuEl.hidden = true;
   startGame();
 });
+settingsBtn.addEventListener("click", () => {
+  if (settingsHintEl) {
+    settingsHintEl.textContent = "Configuracoes em breve.";
+  }
+});
 menuBtn.addEventListener("click", () => {
   openGameMenu();
 });
@@ -1277,6 +1311,9 @@ restartBtn.addEventListener("click", () => {
 homeBtn.addEventListener("click", () => {
   gameMenuEl.hidden = true;
   menuEl.classList.remove("hidden");
+  if (settingsHintEl) {
+    settingsHintEl.textContent = "";
+  }
   setStatus("Menu inicial.");
   render();
 });

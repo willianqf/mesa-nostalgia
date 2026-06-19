@@ -37,6 +37,7 @@ let handScrollFrame = null;
 let recentHandInsert = null;
 let jumpState = null;
 let audioContext = null;
+let effectTimeout = null;
 
 const handEl = document.querySelector("#hand");
 const playersEl = document.querySelector("#players");
@@ -49,6 +50,7 @@ const newGameBtn = document.querySelector("#newGameBtn");
 const menuEl = document.querySelector("#menu");
 const startBtn = document.querySelector("#startBtn");
 const menuBtn = document.querySelector("#menuBtn");
+const tableEl = document.querySelector(".table");
 
 const flyingLayer = document.createElement("div");
 flyingLayer.className = "flying-layer";
@@ -86,7 +88,7 @@ function shuffle(cards) {
   return copy;
 }
 
-function startGame() {
+async function startGame() {
   deck = makeDeck();
   discard = [];
   currentPlayer = 0;
@@ -97,18 +99,24 @@ function startGame() {
   pendingDraw4 = 0;
   gameOver = false;
   gameStarted = true;
-  busy = false;
+  busy = true;
   recentHandInsert = null;
   jumpState = null;
   colorPickerEl.hidden = true;
-  document.querySelector(".table").classList.remove("won");
+  tableEl.classList.remove("won");
+  removeEffectBadge();
+  if (effectTimeout) {
+    window.clearTimeout(effectTimeout);
+    effectTimeout = null;
+  }
 
   for (const player of players) {
     player.hand = [];
-    for (let i = 0; i < 7; i += 1) {
-      player.hand.push(drawCard());
-    }
   }
+
+  setStatus("Distribuindo cartas...");
+  render();
+  await dealInitialHands();
 
   let first = drawCard();
   while (first.color === "wild" || first.type !== "number") {
@@ -120,7 +128,10 @@ function startGame() {
   first.playedBy = null;
   first.landing = { x: 0, y: 0, rot: 7 };
   activeColor = first.color;
+  render();
+  await animateOpeningDiscard(first);
   setStatus("Sua vez. Jogue uma carta.");
+  busy = false;
   render();
 }
 
@@ -241,7 +252,13 @@ async function playCard(playerIndex, cardIndex, chosenColor = null, sourceEl = n
 }
 
 async function applyEffect(card) {
+  if (card.type !== "number") {
+    showEffectBadge(effectLabel(card));
+    await wait(320);
+  }
+
   if (card.type === "reverse") {
+    pulseTable("action-burst");
     direction *= -1;
     if (players.length === 2) {
       advanceTurn();
@@ -249,19 +266,24 @@ async function applyEffect(card) {
   }
 
   if (card.type === "skip") {
+    pulseTable("action-burst");
     advanceTurn();
   }
 
   if (card.type === "draw2") {
     pendingDraw2 += 2 * (card.jumpStack || 1);
+    pulseTable("action-burst");
     advanceTurn();
     setStatus(`${players[currentPlayer].name} precisa jogar +2 ou comprar ${pendingDraw2}.`);
     return;
   } else if (card.type === "wild4") {
     pendingDraw4 += 4 * (card.jumpStack || 1);
+    pulseTable("plus4-impact");
     advanceTurn();
     setStatus(`${players[currentPlayer].name} precisa jogar +4 ou comprar ${pendingDraw4}.`);
     return;
+  } else if (card.type === "wild") {
+    pulseTable("wild-shift");
   }
 
   advanceTurn();
@@ -657,6 +679,7 @@ function render() {
   renderHand();
   renderDiscard();
   renderDirection();
+  renderTableTone();
   const pendingAmount = pendingDrawAmount();
   deckEl.querySelector("span").textContent = pendingAmount > 0 ? `+${pendingAmount}` : "Comprar";
   deckEl.disabled = !gameStarted
@@ -814,6 +837,23 @@ function labelFor(card) {
   return actionLabels[card.type];
 }
 
+function effectLabel(card) {
+  switch (card.type) {
+    case "skip":
+      return "BLOQUEIO";
+    case "reverse":
+      return "REVERSO";
+    case "draw2":
+      return "+2";
+    case "wild":
+      return "TROCA DE COR";
+    case "wild4":
+      return "+4";
+    default:
+      return "";
+  }
+}
+
 function rectCenter(rect) {
   return {
     left: rect.left + rect.width / 2,
@@ -924,6 +964,76 @@ function popTopDiscard() {
   top.classList.remove("drop-pop");
   void top.offsetWidth;
   top.classList.add("drop-pop");
+}
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function dealInitialHands() {
+  for (let round = 0; round < 7; round += 1) {
+    const draws = [];
+    const animations = [];
+    for (let playerIndex = 0; playerIndex < players.length; playerIndex += 1) {
+      const card = drawCard();
+      draws.push({ card, playerIndex });
+      const targetEl = destinationForPlayer(playerIndex) || tableEl;
+      const sourceRect = deckEl.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+      animations.push(animateFloatingCard(card, sourceRect, targetRect, {
+        faceDown: playerIndex !== 0,
+        mode: "draw",
+        duration: 320,
+      }));
+    }
+
+    for (const draw of draws) {
+      players[draw.playerIndex].hand.push(draw.card);
+    }
+    render();
+    await Promise.all(animations);
+  }
+}
+
+async function animateOpeningDiscard(card) {
+  const sourceRect = deckEl.getBoundingClientRect();
+  await animateFloatingCard(card, sourceRect, discardTargetRect(card.landing), {
+    mode: "play",
+    duration: 520,
+    landRot: card.landing.rot,
+  });
+  popTopDiscard();
+}
+
+function removeEffectBadge() {
+  const existing = tableEl.querySelector(".effect-badge");
+  if (existing) existing.remove();
+}
+
+function showEffectBadge(text) {
+  if (!text) return;
+  removeEffectBadge();
+  const badge = document.createElement("div");
+  badge.className = "effect-badge";
+  badge.textContent = text;
+  tableEl.appendChild(badge);
+  if (effectTimeout) {
+    window.clearTimeout(effectTimeout);
+  }
+  effectTimeout = window.setTimeout(() => removeEffectBadge(), 820);
+}
+
+function pulseTable(className) {
+  tableEl.classList.remove(className);
+  void tableEl.offsetWidth;
+  tableEl.classList.add(className);
+  window.setTimeout(() => tableEl.classList.remove(className), 760);
+}
+
+function renderTableTone() {
+  tableEl.classList.remove("tone-red", "tone-blue", "tone-green", "tone-gold");
+  if (!activeColor || activeColor === "wild") return;
+  tableEl.classList.add(`tone-${activeColor}`);
 }
 
 function getAudioContext() {
@@ -1037,7 +1147,7 @@ function animateFloatingCard(card, sourceRect, targetRect, options = {}) {
       offset: 1,
     },
   ], {
-    duration: isDraw ? 920 : 860,
+    duration: options.duration ?? (isDraw ? 920 : 860),
     easing: "cubic-bezier(.18,.84,.2,1)",
     fill: "forwards",
   });

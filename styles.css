@@ -122,6 +122,7 @@ button {
     linear-gradient(120deg, transparent 0 40%, rgba(0, 0, 0, 0.07) 41% 47%, transparent 48%),
     radial-gradient(circle at center, rgba(255, 255, 255, 0.24), transparent 42%),
     var(--table);
+  transition: background 360ms ease, filter 340ms ease;
 }
 
 .table::before {
@@ -131,6 +132,42 @@ button {
   border: 3px solid rgba(255, 255, 255, 0.22);
   border-radius: 50%;
   pointer-events: none;
+}
+
+.table::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.table.tone-red {
+  --table: #bc353f;
+}
+
+.table.tone-blue {
+  --table: #1966bb;
+}
+
+.table.tone-green {
+  --table: #158649;
+}
+
+.table.tone-gold {
+  --table: #b98610;
+}
+
+.table.action-burst::after {
+  animation: tableActionBurst 620ms ease;
+}
+
+.table.wild-shift::after {
+  animation: tableWildShift 760ms ease;
+}
+
+.table.plus4-impact::after {
+  animation: tablePlus4Impact 860ms cubic-bezier(0.18, 0.84, 0.2, 1);
 }
 
 .top-bar {
@@ -449,6 +486,27 @@ button {
   font-weight: 800;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 5px 14px var(--shadow);
+}
+
+.effect-badge {
+  position: absolute;
+  z-index: 16;
+  left: 50%;
+  top: 50%;
+  padding: 10px 18px;
+  border: 3px solid white;
+  border-radius: 999px;
+  color: #1a320d;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: none;
+  background: #ffef57;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -50%);
+  animation: effectBadgeInOut 760ms cubic-bezier(0.18, 0.84, 0.2, 1) forwards;
+  pointer-events: none;
 }
 
 .color-picker {
@@ -873,6 +931,71 @@ button {
   to {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes effectBadgeInOut {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7) rotate(-8deg);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -64%) scale(1.14) rotate(3deg);
+  }
+  74% {
+    opacity: 1;
+    transform: translate(-50%, -74%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -86%) scale(0.92);
+  }
+}
+
+@keyframes tableActionBurst {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.3;
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.32), transparent 56%);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes tableWildShift {
+  0% {
+    opacity: 0;
+  }
+  32% {
+    opacity: 0.46;
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08) 52%, transparent 68%);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes tablePlus4Impact {
+  0% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  26% {
+    opacity: 0.52;
+    transform: scale(1.06);
+    background:
+      radial-gradient(circle at 20% 24%, rgba(233, 67, 67, 0.54), transparent 34%),
+      radial-gradient(circle at 80% 24%, rgba(39, 132, 239, 0.5), transparent 34%),
+      radial-gradient(circle at 80% 76%, rgba(34, 169, 91, 0.5), transparent 34%),
+      radial-gradient(circle at 20% 76%, rgba(242, 189, 46, 0.52), transparent 34%);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
   }
 }
 

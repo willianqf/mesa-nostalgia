@@ -1,13 +1,13 @@
 :root {
-  --red: #e94343;
-  --blue: #2784ef;
-  --green: #22a95b;
-  --gold: #f2bd2e;
+  --red: #e7414b;
+  --blue: #2b7fe6;
+  --green: #1fa758;
+  --gold: #f1bb2c;
   --wild: #25252b;
   --ink: #f8fff7;
-  --table: #1db454;
-  --table-dark: #0b843d;
-  --shadow: rgba(0, 0, 0, 0.28);
+  --table: #18a64f;
+  --table-dark: #0a7a39;
+  --shadow: rgba(0, 0, 0, 0.32);
 }
 
 * {
@@ -25,10 +25,10 @@ body {
   min-height: 100svh;
   overflow: hidden;
   color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, Helvetica, sans-serif;
   background:
-    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.34), transparent 29rem),
-    linear-gradient(135deg, #2ed764, #0b893c);
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.32), transparent 29rem),
+    linear-gradient(135deg, #1fb95a, #066a31);
 }
 
 button {
@@ -139,13 +139,25 @@ button {
   width: 100%;
   min-height: 48px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #12351f;
   font-size: 18px;
   font-weight: 900;
   text-transform: uppercase;
-  background: white;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+  background: linear-gradient(180deg, #ffffff, #e9f3ea);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.primary-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.primary-button:active {
+  transform: translateY(0);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.26);
 }
 
 .ghost-button {
@@ -180,9 +192,10 @@ button {
   padding: 12px;
   overflow: hidden;
   background:
-    linear-gradient(60deg, transparent 0 44%, rgba(255, 255, 255, 0.08) 45% 50%, transparent 51%),
-    linear-gradient(120deg, transparent 0 40%, rgba(0, 0, 0, 0.07) 41% 47%, transparent 48%),
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.24), transparent 42%),
+    linear-gradient(60deg, transparent 0 44%, rgba(255, 255, 255, 0.07) 45% 50%, transparent 51%),
+    linear-gradient(120deg, transparent 0 40%, rgba(0, 0, 0, 0.06) 41% 47%, transparent 48%),
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.26), transparent 46%),
+    radial-gradient(circle at 50% 120%, rgba(0, 0, 0, 0.28), transparent 60%),
     var(--table);
   transition: background 360ms ease, filter 340ms ease;
 }
@@ -385,44 +398,73 @@ button {
 
 .direction {
   position: absolute;
-  top: calc(50% - 168px);
+  top: calc(50% - 26px);
   left: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  min-width: 102px;
-  padding: 8px 11px 10px;
-  border: 2px solid rgba(255, 255, 255, 0.72);
-  border-radius: 16px;
-  color: #12351f;
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: uppercase;
-  transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 7px 16px var(--shadow);
+  z-index: 2;
+  width: clamp(188px, 56vw, 232px);
+  height: clamp(188px, 56vw, 232px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
-.direction-arrow {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 3px solid rgba(18, 53, 31, 0.36);
-  border-radius: 50%;
-  font-size: 26px;
-  line-height: 1;
-  background: rgba(255, 255, 255, 0.6);
+.dir-ring {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.32));
+}
+
+.dir-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.42);
+  stroke-width: 1.6;
+  stroke-dasharray: 3 5;
+  stroke-linecap: round;
+}
+
+.dir-spinner {
+  transform-origin: 50px 50px;
+  animation: dirSpin 7s linear infinite;
+}
+
+.dir-arrow {
+  fill: #ffffff;
+}
+
+/* O nucleo fica atras das cartas centrais; mantido apenas como leve halo. */
+.dir-core {
+  fill: rgba(255, 255, 255, 0.08);
+}
+
+.direction.reversed .dir-ring {
+  transform: scaleX(-1);
 }
 
 .direction-label {
-  line-height: 1;
-  letter-spacing: 0.04em;
+  position: absolute;
+  left: 50%;
+  top: -14px;
+  transform: translateX(-50%);
+  padding: 2px 12px;
+  border-radius: 999px;
+  color: #12351f;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 10px var(--shadow);
 }
 
-.direction.reversed {
-  background: rgba(255, 239, 87, 0.9);
+.direction.reversed .direction-label {
+  background: rgba(255, 239, 87, 0.94);
+}
+
+@keyframes dirSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .deck,
@@ -430,8 +472,8 @@ button {
   width: 82px;
   height: 112px;
   border: 4px solid white;
-  border-radius: 10px;
-  box-shadow: 0 8px 16px var(--shadow);
+  border-radius: 11px;
+  box-shadow: 0 8px 16px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .deck {
@@ -490,19 +532,19 @@ button {
 }
 
 .card.red {
-  background: var(--red);
+  background: linear-gradient(150deg, #f15862, var(--red) 58%, #c8313b);
 }
 
 .card.blue {
-  background: var(--blue);
+  background: linear-gradient(150deg, #4a97f0, var(--blue) 58%, #1c63c4);
 }
 
 .card.green {
-  background: var(--green);
+  background: linear-gradient(150deg, #36bd6e, var(--green) 58%, #138443);
 }
 
 .card.gold {
-  background: var(--gold);
+  background: linear-gradient(150deg, #f6cb52, var(--gold) 58%, #d29c14);
 }
 
 .card.wild {
@@ -950,25 +992,6 @@ button {
     opacity: 0;
     transform: translate(-50%, -50%) scale(0.65) rotate(-9deg);
   }
-
-  @keyframes blockBurst {
-    0% {
-      opacity: 0;
-      transform: translate(-50%, -44%) scale(0.74);
-    }
-    18% {
-      opacity: 1;
-      transform: translate(-50%, -74%) scale(1.12);
-    }
-    72% {
-      opacity: 1;
-      transform: translate(-50%, -92%) scale(1);
-    }
-    100% {
-      opacity: 0;
-      transform: translate(-50%, -112%) scale(0.94);
-    }
-  }
   18% {
     opacity: 1;
     transform: translate(-50%, -72%) scale(1.16) rotate(4deg);
@@ -980,6 +1003,25 @@ button {
   100% {
     opacity: 0;
     transform: translate(-50%, -120%) scale(0.92) rotate(0deg);
+  }
+}
+
+@keyframes blockBurst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -44%) scale(0.74);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -74%) scale(1.12);
+  }
+  72% {
+    opacity: 1;
+    transform: translate(-50%, -92%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -112%) scale(0.94);
   }
 }
 
